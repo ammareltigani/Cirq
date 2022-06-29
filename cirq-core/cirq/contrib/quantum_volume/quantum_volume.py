@@ -197,6 +197,31 @@ def process_results(
     return data
 
 
+@cirq.transformer
+def swap_permutation_replacer(
+    circuit: 'cirq.Circuit',
+    *,
+    context: Optional['cirq.TransformerContext'] = None,
+) -> None:
+    """Replaces SwapPermutationGates with their underlying implementation
+    gate."""
+
+    def map_func(op: 'cirq.Operation', index: int) -> 'cirq.OP_TREE':
+        if isinstance(op.gate, cirq.contrib.acquaintance.SwapNetworkGate):
+            return op.gate.swap_gate.on(*op.qubits)
+        return op
+
+    return cirq.map_operations(
+        circuit=circuit,
+        map_func=map_func,
+        deep=context.deep if context else False,
+        tags_to_ignore=context.tags_to_ignore if context else (),
+    )
+
+
+@cirq._compat.deprecated_class(
+    deadline='v1.0', fix='Use cirq.contrib.quantum_volume.quantum_volume.swap_permutation_replacer'
+)
 class SwapPermutationReplacer(cirq.PointOptimizer):
     """Replaces SwapPermutationGates with their underlying implementation
     gate."""
@@ -296,7 +321,7 @@ def compile_circuit(
     mapping = swap_networks[0].final_mapping()
     # Replace the PermutationGates with regular gates, so we don't proliferate
     # the routing implementation details to the compiler and the device itself.
-    SwapPermutationReplacer().optimize_circuit(routed_circuit)
+    swap_permutation_replacer(routed_circuit)
 
     if not compiler:
         return CompilationResult(circuit=routed_circuit, mapping=mapping, parity_map=parity_map)
